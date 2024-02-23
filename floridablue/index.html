@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html>
+<head>
+
+<style>
+
+.center {
+	margin: auto;
+	width: 50%;
+	height: 50%;
+	padding: 10px;
+}
+
+.center-img {
+  display: block;
+  margin-left: auto;
+  margin-right: auto;
+  width: 50%;
+}
+
+p.dotted {border-style: dotted;}
+p.solid {border-style: solid;}
+
+</style>
+
+<script type="text/javascript" charset="utf-8">
+  (function (g, e, n, es, ys) {
+    g['_genesysJs'] = e;
+    g[e] = g[e] || function () {
+      (g[e].q = g[e].q || []).push(arguments)
+    };
+    g[e].t = 1 * new Date();
+    g[e].c = es;
+    ys = document.createElement('script'); ys.async = 1; ys.src = n; ys.charset = 'utf-8'; document.head.appendChild(ys);
+  })(window, 'Genesys', 'https://apps.mypurecloud.com/genesys-bootstrap/genesys.min.js', {
+    environment: 'prod',
+    deploymentId: '3ba22515-bb61-4839-9905-7191e46a3a63'
+  });
+
+	Genesys("command", "Database.set", { messaging: { customAttributes: { 
+		webPageLocation: "floridablueenglish", 
+	}}});
+
+</script>
+
+</head>
+<body>
+
+	<div class="center">
+		<img src="./images/FloridaBlueLogo.png" class="center-img" />
+	</div>
+	<p class="solid"></p>
+	
+	<h1>Florida Blue Test Page</h1>
+  
+	<p>Description: This is a test page for the Genesys Widget.</p>
+
+</body>
+</html>
