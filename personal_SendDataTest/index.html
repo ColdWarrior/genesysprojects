@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Dynamic Data Update</title>
+    <style>
+        body { font-family: sans-serif; padding: 20px; }
+        .container { max-width: 600px; margin: auto; }
+        
+        /* New Flexbox container for horizontal alignment */
+        .form-row {
+            display: flex; /* Makes the container a flex container */
+            align-items: flex-end; /* Vertically aligns the items at the bottom */
+            gap: 10px; /* Adds space between the input and button */
+            margin-bottom: 20px;
+        }
+
+        #name {
+            flex-grow: 1; /* Allows the input to take up all available space */
+            padding: 10px;
+            box-sizing: border-box;
+        }
+
+        #submit-button {
+            padding: 10px;
+            box-sizing: border-box;
+            cursor: pointer;
+        }
+
+        #response-container {
+            border: 1px solid #ccc;
+            padding: 15px;
+            background-color: #f9f9f9;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h2>Send Data & Get New Data</h2>
+        <form id="data-form">
+            <label for="name">Enter a Name:</label>
+            <div class="form-row">
+                <input type="text" id="name" name="name" placeholder="e.g., Jane Doe" required>
+                <button type="submit" id="submit-button">Send Data</button>
+            </div>
+        </form>
+        <div id="response-container">
+            <p><strong>Response from server:</strong></p>
+            <div id="server-response"></div>
+        </div>
+    </div>
+
+    <script>
+        const form = document.getElementById('data-form');
+        const serverResponseDiv = document.getElementById('server-response');
+
+        form.addEventListener('submit', async (event) => {
+            event.preventDefault(); 
+
+            const name = document.getElementById('name').value;
+            const data = {
+                input_name: name
+            };
+
+            try {
+                const response = await fetch('YOUR_WORKER_URL_HERE', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data),
