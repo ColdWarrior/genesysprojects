@@ -3,7 +3,7 @@ name: Deploy Cloudflare Worker
 on:
   push:
     branches:
-      - main # or your production branch name
+      - main personal_genchatbotconnector
 
 jobs:
   deploy:
