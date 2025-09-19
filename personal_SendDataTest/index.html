@@ -70,3 +70,20 @@
                         'Content-Type': 'application/json',
                     },
                     body: JSON.stringify(data),
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+
+                const result = await response.json();
+                serverResponseDiv.innerHTML = `<p>Hello, ${result.name}!</p><p>Message from server: ${result.message}</p>`;
+
+            } catch (error) {
+                console.error('Error:', error);
+                serverResponseDiv.textContent = 'An error occurred. Please check the console.';
+            }
+        });
+    </script>
+</body>
+</html>
