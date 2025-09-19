@@ -16,4 +16,4 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy personal_genchatbotconnector/src/index.js --name genchatbotconnector
+          command: deploy personal_genchatbotconnector/src/index.js --name genchatbotconnector --compatibility-date "2025-09-19"
