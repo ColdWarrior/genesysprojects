@@ -1,41 +1,67 @@
 export default {
-  async fetch(request) {
-    // Only process POST requests, as required by the Genesys Bot Connector.
-    if (request.method !== 'POST') {
-      return new Response('Method not allowed', { status: 405 });
-    }
-
-    try {
-      // Read the JSON body sent by Genesys.
-      const requestBody = await request.json();
-
-      // Log the incoming message to the console for debugging.
-      console.log('Received message:', requestBody);
+  async fetch(request, env) {
+    // Check for POST method and enforce Basic Authentication
+    if (request.method === 'POST') {
+      const authHeader = request.headers.get('Authorization');
       
+      // Check if the Authorization header is present
+      if (!authHeader) {
+        return new Response('Unauthorized: Missing Authorization Header', {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Basic realm="Secure Area"',
+          },
+        });
+      }
 
-      // Here, you would implement your bot's logic.
-      // This is the "translation layer" that would communicate with your bot.
-      // For this example, we will just send a simple JSON response back.
+      // Decode the Base64 credentials
+      const [scheme, encoded] = authHeader.split(' ');
+      if (scheme !== 'Basic' || !encoded) {
+        return new Response('Unauthorized: Invalid Authorization Header', {
+          status: 401,
+        });
+      }
+      
+      const credentials = atob(encoded);
+      const [username, password] = credentials.split(':');
+      
+      // Compare the credentials to the secure environment variables
+      if (username !== env.WORKER_USERNAME || password !== env.WORKER_PASSWORD) {
+        return new Response('Unauthorized: Invalid Credentials', {
+          status: 401,
+          headers: {
+            'WWW-Authenticate': 'Basic realm="Secure Area"',
+          },
+        });
+      }
 
-      const responseBody = {
-        messages: [{
-          type: "Text",
-          text: "Hello, I am a simple bot connector!",
-          agent: {
-            "name": "Cloudflare Bot"
+      // If authentication is successful, proceed with the original logic
+      try {
+        const requestBody = await request.json();
+        console.log('Received message:', requestBody);
+        
+        const responseBody = {
+          messages: [{
+            type: "Text",
+            text: "Hello, I am a simple bot connector!",
+            agent: {
+              "name": "Cloudflare Bot"
+            }
+          }]
+        };
+
+        return new Response(JSON.stringify(responseBody), {
+          headers: {
+            'Content-Type': 'application/json'
           }
-        }]
-      };
+        });
 
-      // Send the response back to Genesys.
-      return new Response(JSON.stringify(responseBody), {
-        headers: {
-          'Content-Type': 'application/json'
-        }
-      });
-    } catch (err) {
-      // Handle any errors that occur during the process.
-      return new Response(`Error processing request: ${err.message}`, { status: 500 });
+      } catch (err) {
+        return new Response(`Error processing request: ${err.message}`, { status: 500 });
+      }
     }
+    
+    // Default response for non-POST requests
+    return new Response('Method not allowed', { status: 405 });
   }
 };
