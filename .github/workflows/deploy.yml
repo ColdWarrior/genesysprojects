@@ -9,9 +9,9 @@ jobs:
 deploy:
 runs-on: ubuntu-latest
 steps:
-- name: Checkout repository
+  - name: Checkout repository
+    uses: actions/checkout@v4
 
-uses: actions/checkout@v4
   - name: Install dependencies
     run: npm install @google-cloud/dialogflow
     working-directory: './personal_genchatbotconnector'
