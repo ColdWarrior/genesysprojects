@@ -7,20 +7,23 @@ export default {
       return new Response("Method Not Allowed", { status: 405 });
     }
 
-    // --- Authentication ---
-    const headers = request.headers;
-    const username = headers.get('username');
-    const password = headers.get('password');
-
-    const expectedUsername = env.WORKER_USERNAME;
-    const expectedPassword = env.WORKER_PASSWORD;
-
-    if (username !== expectedUsername || password !== expectedPassword) {
-      return new Response("Unauthorized", { status: 401 });
-    }
-    // --- End of Authentication ---
-
     try {
+      // --- Authentication ---
+      const headers = request.headers;
+      const username = headers.get('username');
+      const password = headers.get('password');
+
+      const expectedUsername = env.WORKER_USERNAME;
+      const expectedPassword = env.WORKER_PASSWORD;
+
+      console.log('Worker Username:', expectedUsername);
+      console.log('Worker Password:', expectedPassword ? 'Exists' : 'Does not exist');
+
+      if (username !== expectedUsername || password !== expectedPassword) {
+        return new Response("Unauthorized", { status: 401 });
+      }
+      // --- End of Authentication ---
+
       // Parse the incoming request body from the bot connector
       const requestBody = await request.json();
       console.log('Received message from bot connector:', JSON.stringify(requestBody, null, 2));
@@ -41,6 +44,8 @@ export default {
       const credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
       const projectId = credentials.project_id;
       
+      console.log('Dialogflow Project ID:', projectId);
+
       // Initialize the Dialogflow client with service account credentials
       const sessionClient = new SessionsClient({
           projectId: projectId,
@@ -94,7 +99,7 @@ export default {
       });
 
     } catch (e) {
-      // Catch any errors that might occur
+      // Catch any errors that might occur and log the full message
       console.error('Error processing request:', e.message);
       return new Response(`Error: ${e.message}`, { status: 500 });
     }
