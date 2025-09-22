@@ -1,4 +1,4 @@
-import { SessionsClient } from 'https://cdn.jsdelivr.net/npm/@google-cloud/dialogflow@4.7.0/build/src/v2beta1/sessions_client.js';
+import { SessionsClient } from '@google-cloud/dialogflow';
 
 export default {
   async fetch(request, env) {
