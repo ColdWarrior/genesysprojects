@@ -20,5 +20,5 @@ jobs:
         uses: cloudflare/wrangler-action@v3
         with:
           apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-          command: deploy
+          command: deploy --config wrangler.toml
           working-directory: './personal_genchatbotconnector' # This is the directory containing wrangler.toml
