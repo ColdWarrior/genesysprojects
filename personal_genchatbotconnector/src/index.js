@@ -32,13 +32,23 @@ export default {
       if (!userMessage) {
         return new Response("No user message found.", { status: 400 });
       }
-
-      // Initialize the Dialogflow client. You will need to configure your environment with
-      // your Google Cloud project credentials.
-      const projectId = env.GOOGLE_CLOUD_PROJECT_ID;
-      const sessionClient = new SessionsClient();
+      
+      // Get Dialogflow credentials from environment variables.
+      // NOTE: Make sure to set DIALOGFLOW_CREDENTIALS as a secret in your Cloudflare Worker.
+      const credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
+      const projectId = credentials.project_id;
+      
+      // Initialize the Dialogflow client with service account credentials
+      const sessionClient = new SessionsClient({
+          projectId: projectId,
+          credentials: {
+              client_email: credentials.client_email,
+              private_key: credentials.private_key,
+          }
+      });
+      
       const sessionPath = sessionClient.projectAgentSessionPath(projectId, sessionId);
-
+      
       // The Dialogflow request
       const dialogflowRequest = {
         session: sessionPath,
