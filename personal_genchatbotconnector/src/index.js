@@ -41,6 +41,11 @@ export default {
       
       // Get Dialogflow credentials from environment variables.
       // NOTE: Make sure to set DIALOGFLOW_CREDENTIALS as a secret in your Cloudflare Worker.
+      console.log('Checking DIALOGFLOW_CREDENTIALS...');
+      if (!env.DIALOGFLOW_CREDENTIALS) {
+        throw new Error('DIALOGFLOW_CREDENTIALS environment variable is not set.');
+      }
+
       const credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
       const projectId = credentials.project_id;
       
