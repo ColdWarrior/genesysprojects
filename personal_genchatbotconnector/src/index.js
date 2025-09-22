@@ -40,22 +40,21 @@ export default {
         const requestBody = await request.json();
         console.log('Received message:', requestBody);
         
-        const responseBody = {
-          messages: [{
-            type: "Text",
-            text: "Hello, I am a simple bot connector!",
-            agent: {
-              "name": "Cloudflare Bot"
-            }
-          }]
-        };
+        const responseBody = {{
+		  "replymessages": [
+			{
+			  "type": "Text",
+			  "text": "Hello, I am a simple bot connector!"
+			}
+		  ]
+		};
 
         return new Response(JSON.stringify(responseBody), {
           headers: {
             'Content-Type': 'application/json'
           }
         });
-
+	
       } catch (err) {
         return new Response(`Error processing request: ${err.message}`, { status: 500 });
       }
