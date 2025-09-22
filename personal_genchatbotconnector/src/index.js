@@ -28,6 +28,9 @@ export default {
       // Extract the user's message from the specified schema
       const userMessage = requestBody.inputMessage.text;
       const sessionId = requestBody.botSessionId; // Use botSessionId as the session ID
+      
+      console.log('User Message:', userMessage);
+      console.log('Session ID:', sessionId);
 
       if (!userMessage) {
         return new Response("No user message found.", { status: 400 });
@@ -59,13 +62,15 @@ export default {
           },
         },
       };
+      
+      console.log('Sending request to Dialogflow with payload:', JSON.stringify(dialogflowRequest, null, 2));
 
       // Send the query to Dialogflow and get the response
       const responses = await sessionClient.detectIntent(dialogflowRequest);
       const result = responses[0].queryResult;
 
       // Log the Dialogflow response for debugging
-      console.log('Dialogflow response:', JSON.stringify(result, null, 2));
+      console.log('Dialogflow response:', JSON.stringify(responses, null, 2));
 
       // Get the fulfillment text from Dialogflow's response
       const dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
