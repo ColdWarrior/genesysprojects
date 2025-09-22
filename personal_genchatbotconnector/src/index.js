@@ -1,66 +1,51 @@
 export default {
   async fetch(request, env) {
-    // Check for POST method and enforce Basic Authentication
-    if (request.method === 'POST') {
-      const authHeader = request.headers.get('Authorization');
-      
-      // Check if the Authorization header is present
-      if (!authHeader) {
-        return new Response('Unauthorized: Missing Authorization Header', {
-          status: 401,
-          headers: {
-            'WWW-Authenticate': 'Basic realm="Secure Area"',
-          },
-        });
-      }
-
-      // Decode the Base64 credentials
-      const [scheme, encoded] = authHeader.split(' ');
-      if (scheme !== 'Basic' || !encoded) {
-        return new Response('Unauthorized: Invalid Authorization Header', {
-          status: 401,
-        });
-      }
-      
-      const credentials = atob(encoded);
-      const [username, password] = credentials.split(':');
-      
-      // Compare the credentials to the secure environment variables
-      if (username !== env.WORKER_USERNAME || password !== env.WORKER_PASSWORD) {
-        return new Response('Unauthorized: Invalid Credentials', {
-          status: 401,
-          headers: {
-            'WWW-Authenticate': 'Basic realm="Secure Area"',
-          },
-        });
-      }
-
-      // If authentication is successful, proceed with the original logic
-      try {
-        const requestBody = await request.json();
-        console.log('Received message:', requestBody);
-        
-        const responseBody = {
-		  "replymessages": [
-			{
-			  "type": "Text",
-			  "text": "Hello, I am a simple bot connector!"
-			}
-		  ]
-		};
-
-        return new Response(JSON.stringify(responseBody), {
-          headers: {
-            'Content-Type': 'application/json'
-          }
-        });
-
-      } catch (err) {
-        return new Response(`Error processing request: ${err.message}`, { status: 500 });
-      }
+    // Only accept POST requests
+    if (request.method !== 'POST') {
+      return new Response("Method Not Allowed", { status: 405 });
     }
-    
-    // Default response for non-POST requests
-    return new Response('Method not allowed', { status: 405 });
-  }
+
+    // --- Authentication ---
+    const headers = request.headers;
+    const username = headers.get('username');
+    const password = headers.get('password');
+
+    // Use environment variables for credentials
+    const expectedUsername = env.WORKER_USERNAME;
+    const expectedPassword = env.WORKER_PASSWORD; 
+
+    if (username !== expectedUsername || password !== expectedPassword) {
+      return new Response("Unauthorized", { status: 401 });
+    }
+    // --- End of Authentication ---
+
+    try {
+      // Parse the incoming request body
+      const requestBody = await request.json();
+
+      // Log the incoming message for debugging purposes
+      console.log('Received message:', JSON.stringify(requestBody));
+
+      // Build the response in the format required by the Genesys Cloud Bot Connector
+      const response = {
+        "replymessages": [
+          {
+            "type": "Text",
+            "text": "Hello, I am a simple bot connector!"
+          }
+        ]
+      };
+
+      // Return the JSON response with a 200 OK status
+      return new Response(JSON.stringify(response), {
+        status: 200,
+        headers: {
+          'Content-Type': 'application/json'
+        }
+      });
+    } catch (e) {
+      // Catch any errors that might occur during parsing or processing
+      return new Response(`Error: ${e.message}`, { status: 500 });
+    }
+  },
 };
