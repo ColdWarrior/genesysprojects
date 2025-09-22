@@ -3,10 +3,6 @@ main = "./personal_genchatbotconnector/src/index.js"
 compatibility_date = "2025-09-19"
 compatibility_flags = ["nodejs_compat"]
 
-[build]
-command = "npm install && npx wrangler deploy --minify --dry-run --outdir=dist"
-external = ["@google-cloud/dialogflow", "stream", "buffer", "events", "gcp-metadata"]
-
 [[routes]]
 pattern = "botconnector.abundo.dev/*"
 zone_id = "bb52fca0ba5b2ef5fcf914b08733a904" # Your domain's Zone ID
