@@ -1,10 +1,23 @@
-  - name: Install dependencies
+- name: Install dependencies
     run: npm install @google-cloud/dialogflow
     working-directory: './personal_genchatbotconnector'
 
-  - name: Deploy Worker
-    uses: cloudflare/wrangler-action@v3
-    with:
-      apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
-      command: deploy --name genchatbotconnector --compatibility-date "2025-09-19"
-      working-directory: './personal_genchatbotconnector' # This is the directory containing wrangler.toml
+- name: Deploy Cloudflare Worker
+
+on:
+  push:
+    branches:
+      - main # This workflow will run when you push to the 'main' branch
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Deploy Worker
+        uses: cloudflare/wrangler-action@v3
+        with:
+          apiToken: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          command: deploy personal_genchatbotconnector/src/index.js --name genchatbotconnector --compatibility-date "2025-09-19"
