@@ -1,5 +1,5 @@
 name = "genchatbotconnector"
-main = "src/index.js"
+main = "/personal_genchatbotconnector/src/index.js"
 compatibility_date = "2025-09-19"
 compatibility_flags = ["nodejs_compat"]
 
