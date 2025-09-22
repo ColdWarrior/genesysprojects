@@ -1,4 +1,5 @@
-import { SessionsClient } from '@google-cloud/dialogflow';
+// This code is rewritten to use the standard 'fetch' API instead of the incompatible @google-cloud/dialogflow library.
+// It directly interacts with the Dialogflow REST API to avoid Node.js-specific dependencies.
 
 export default {
     async fetch(request, env) {
@@ -131,7 +132,7 @@ export default {
     },
 };
 
-// Helper function to create a signed JWT
+// Helper function to create a signed JWT for authentication
 async function createJWT(payload, privateKey) {
     const header = {
         "alg": "RS256",
