@@ -1,6 +1,9 @@
+[build]
+command = "npm install && npx wrangler build"
+
+[build.rollup]
+external = ["@google-cloud/dialogflow"]
+
 [[routes]]
 pattern = "botconnector.abundo.dev/*"
 zone_id = "bb52fca0ba5b2ef5fcf914b08733a904" # Your domain's Zone ID
-
-
-
