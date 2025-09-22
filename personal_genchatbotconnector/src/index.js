@@ -97,6 +97,15 @@ export default {
                 body: JSON.stringify(dialogflowRequest)
             });
 
+            // --- START: New Error Handling for API Response ---
+            if (!response.ok) {
+                const errorBody = await response.json();
+                console.error('Dialogflow API returned an error:', JSON.stringify(errorBody, null, 2));
+                // Throw an error to be caught by the main catch block
+                throw new Error(`Dialogflow API error: ${response.status} ${response.statusText}`);
+            }
+            // --- END: New Error Handling ---
+            
             const dialogflowResponse = await response.json();
             const result = dialogflowResponse.queryResult;
 
