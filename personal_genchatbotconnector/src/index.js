@@ -40,7 +40,7 @@ export default {
         const requestBody = await request.json();
         console.log('Received message:', requestBody);
         
-        const responseBody = {{
+        const responseBody = {
 		  "replymessages": [
 			{
 			  "type": "Text",
@@ -54,7 +54,7 @@ export default {
             'Content-Type': 'application/json'
           }
         });
-	
+
       } catch (err) {
         return new Response(`Error processing request: ${err.message}`, { status: 500 });
       }
