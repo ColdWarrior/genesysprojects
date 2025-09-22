@@ -45,8 +45,20 @@ export default {
       if (!env.DIALOGFLOW_CREDENTIALS) {
         throw new Error('DIALOGFLOW_CREDENTIALS environment variable is not set.');
       }
-
-      const credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
+      
+      // Additional logging to debug the credentials parsing issue
+      console.log('Credential string length:', env.DIALOGFLOW_CREDENTIALS.length);
+      console.log('First 50 characters of credentials:', env.DIALOGFLOW_CREDENTIALS.substring(0, 50));
+      
+      let credentials;
+      try {
+        credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
+      } catch (parseError) {
+        // Log a more specific error for the JSON parsing failure
+        console.error('Failed to parse DIALOGFLOW_CREDENTIALS JSON:', parseError.message);
+        return new Response(`Error: Failed to parse credentials. Details: ${parseError.message}`, { status: 500 });
+      }
+      
       const projectId = credentials.project_id;
       
       console.log('Dialogflow Project ID:', projectId);
