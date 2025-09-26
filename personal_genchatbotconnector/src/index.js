@@ -132,20 +132,25 @@ export default {
             );
 
             if (existingFallbackContext && existingFallbackContext.parameters) {
-                // IMPORTANT: In the request body from Genesys, Dialogflow parameters are nested under a 'fields' object if they were complex data types.
-                const countField = existingFallbackContext.parameters.fields && existingFallbackContext.parameters.fields.count;
                 let countValue = null;
                 
-                if (countField) {
-                    // Check if value is stored as string (most common for custom connectors)
-                    countValue = countField.stringValue;
+                // Prioritize reading from the 'fields' object, which is common in structured JSON returns
+                const fields = existingFallbackContext.parameters.fields;
+                
+                if (fields && fields.count) {
+                    // Check for nested types: numberValue first, then stringValue
+                    if (fields.count.numberValue !== undefined) {
+                        countValue = fields.count.numberValue;
+                    } else if (fields.count.stringValue !== undefined) {
+                        countValue = fields.count.stringValue;
+                    }
                 } else if (existingFallbackContext.parameters.count) {
                     // Fallback to directly reading the 'count' property
                     countValue = existingFallbackContext.parameters.count;
                 }
                 
-                if (countValue) {
-                     // Ensure string value is parsed to integer for comparison
+                if (countValue !== null) {
+                     // Ensure value is parsed to integer for comparison
                     const parsedCount = parseInt(countValue, 10);
                     fallbackCount = isNaN(parsedCount) ? 0 : parsedCount;
                 }
