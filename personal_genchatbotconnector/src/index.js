@@ -24,7 +24,7 @@ async function createJWT(payload, privateKey) {
         data
     );
 
-    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8array(signature)))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
     return `${token}.${signatureBase64Url}`;
@@ -150,13 +150,7 @@ export default {
 
             console.log('Current fallback count:', fallbackCount);
 
-            // If the user's input is empty, and it's not the first message, increment the counter
-            // This is a simple heuristic to detect no-match scenarios
-            if (userMessage.trim() === '' && fallbackCount > 0) {
-                 fallbackCount++;
-            }
             // --- End: Fallback Counter Logic ---
-
 
             // The Dialogflow REST API endpoint
             const url = `https://dialogflow.googleapis.com/v2/projects/${projectId}/agent/sessions/${sessionId}:detectIntent`;
@@ -212,21 +206,35 @@ export default {
             let endConversation = false;
             let finalReply = dialogflowReply;
 
+            // Check if the matched intent is the fallback intent.
             if (dialogflowIntent === "Default Fallback Intent") {
-                fallbackCount++;
-                if (fallbackCount >= 3) {
+                // Check if the previous conversation had an active context
+                const previousContext = botContexts.find(context => context.lifespanCount > 0);
+
+                if (fallbackCount >= 2) { // End the conversation after 3 total fallbacks (0, 1, 2)
                     endConversation = true;
                     finalReply = "I'm sorry, I am unable to help with that. Please contact a human agent for assistance. Goodbye!";
                 } else {
-                    const newFallbackContext = {
+                    fallbackCount++;
+                    finalReply = "I'm sorry, I'm having trouble understanding. Could you please try rephrasing?";
+
+                    // If there was a previous context, re-apply it to the next turn.
+                    if (previousContext) {
+                        outputContexts.push({
+                            name: previousContext.name,
+                            lifespanCount: 1, // Reset lifespan to 1 to keep it active for the next turn
+                            parameters: previousContext.parameters
+                        });
+                    }
+                    
+                    // Add the fallback counter context
+                    outputContexts.push({
                         name: fallbackContextName,
                         lifespanCount: 1,
                         parameters: {
                             fallback_count: fallbackCount
                         }
-                    };
-                    outputContexts.push(newFallbackContext);
-                    finalReply = "I'm sorry, I'm having trouble understanding. Could you please try rephrasing?";
+                    });
                 }
             } else {
                  // Reset the fallback counter if a valid intent is matched
