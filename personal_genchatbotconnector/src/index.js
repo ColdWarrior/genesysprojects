@@ -127,15 +127,28 @@ export default {
             let existingFallbackContext = null;
 
             // Find existing fallback context and read the count
-            // We look for the context that contains the display name in its full name path
             existingFallbackContext = botContexts.find(context => 
                 context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
             );
 
-            if (existingFallbackContext && existingFallbackContext.parameters && existingFallbackContext.parameters.count) {
-                // IMPORTANT: The count must be parsed as a number.
-                const parsedCount = parseInt(existingFallbackContext.parameters.count, 10);
-                fallbackCount = isNaN(parsedCount) ? 0 : parsedCount;
+            if (existingFallbackContext && existingFallbackContext.parameters) {
+                // IMPORTANT: In the request body from Genesys, Dialogflow parameters are nested under a 'fields' object if they were complex data types.
+                const countField = existingFallbackContext.parameters.fields && existingFallbackContext.parameters.fields.count;
+                let countValue = null;
+                
+                if (countField) {
+                    // Check if value is stored as string (most common for custom connectors)
+                    countValue = countField.stringValue;
+                } else if (existingFallbackContext.parameters.count) {
+                    // Fallback to directly reading the 'count' property
+                    countValue = existingFallbackContext.parameters.count;
+                }
+                
+                if (countValue) {
+                     // Ensure string value is parsed to integer for comparison
+                    const parsedCount = parseInt(countValue, 10);
+                    fallbackCount = isNaN(parsedCount) ? 0 : parsedCount;
+                }
             }
             // --- End: Fallback Counter Context Setup ---
 
@@ -219,7 +232,7 @@ export default {
                     // Add the updated context to the output contexts array
                     outputContexts.push(updatedFallbackContext);
                 }
-            } else if (existingFallbackContext) {
+            } else if (fallbackCount > 0) {
                 // A valid intent was matched. Reset the counter by setting lifespan to 0.
                 
                 const resetContext = {
