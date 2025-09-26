@@ -121,7 +121,6 @@ export default {
             const accessToken = await getAccessToken(jwt);
 
             // --- Start: Fallback Counter Context Setup ---
-            // NOTE: The full context path is required for the REST API request body, but for simplicity in the context name (which is what Genesys passes back to the connector), we rely on the session path here.
             const FALLBACK_CONTEXT_DISPLAY_NAME = 'fallback_counter'; 
             const FALLBACK_CONTEXT_FULL_NAME = `projects/${projectId}/agent/sessions/${sessionId}/contexts/${FALLBACK_CONTEXT_DISPLAY_NAME}`;
             let fallbackCount = 0;
@@ -129,7 +128,7 @@ export default {
 
             // Find existing fallback context and read the count
             const fallbackContext = botContexts.find((context, index) => {
-                // We check the full name for matching
+                // Check the full name for matching
                 if (context.name === FALLBACK_CONTEXT_FULL_NAME) {
                     existingFallbackContextIndex = index;
                     return true;
@@ -189,14 +188,20 @@ export default {
                     botState = "COMPLETE";
                     dialogflowReply = "I'm sorry, I cannot understand your request after multiple attempts. I am now closing this conversation. Please contact a human agent if you require further assistance.";
 
-                    // We ensure the context is removed from the output by setting lifespan to 0
-                    outputContexts.push({
+                    // Ensure the context is removed from the output by setting lifespan to 0
+                    const finalContext = {
                         name: FALLBACK_CONTEXT_FULL_NAME,
                         lifespanCount: 0,
                         parameters: {
                             count: fallbackCount.toString()
                         }
-                    });
+                    };
+                    // Find and update the existing context or push new one
+                    if (existingFallbackContextIndex !== -1) {
+                        outputContexts[existingFallbackContextIndex] = finalContext;
+                    } else {
+                        outputContexts.push(finalContext);
+                    }
 
                 } else {
                     // *** Not 3 strikes: Send generic message and update counter context ***
@@ -214,20 +219,31 @@ export default {
 
                     // Check if we need to replace an existing context or push a new one
                     if (existingFallbackContextIndex !== -1) {
+                        // Replace the old context entry
                         outputContexts[existingFallbackContextIndex] = updatedFallbackContext;
                     } else {
+                        // Add the new context entry
                         outputContexts.push(updatedFallbackContext);
                     }
                 }
             } else if (fallbackCount > 0) {
                 // A valid intent was matched. Reset the counter by setting lifespan to 0.
-                outputContexts.push({
+                const resetContext = {
                     name: FALLBACK_CONTEXT_FULL_NAME,
                     lifespanCount: 0,
                     parameters: {
                         count: "0"
                     }
-                });
+                };
+                // Find the existing context index to update it in the outputContexts array
+                const resetContextIndex = outputContexts.findIndex(c => c.name === FALLBACK_CONTEXT_FULL_NAME);
+                
+                if (resetContextIndex !== -1) {
+                    outputContexts[resetContextIndex] = resetContext;
+                } else {
+                    // If it's not present, push the reset context anyway just in case of unexpected context loss.
+                    outputContexts.push(resetContext);
+                }
             }
             // --- End: Post-processing Fallback Logic ---
 
