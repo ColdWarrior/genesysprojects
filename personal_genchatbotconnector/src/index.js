@@ -139,6 +139,25 @@ export default {
 
             console.log('Dialogflow Project ID:', projectId);
 
+            // --- Start: Fallback Counter Logic ---
+            let fallbackCount = 0;
+            const fallbackContextName = `projects/${projectId}/agent/sessions/${sessionId}/contexts/fallback_counter`;
+
+            const existingFallbackContext = botContexts.find(context => context.name === fallbackContextName);
+            if (existingFallbackContext && existingFallbackContext.parameters && existingFallbackContext.parameters.fallback_count) {
+                fallbackCount = existingFallbackContext.parameters.fallback_count;
+            }
+
+            console.log('Current fallback count:', fallbackCount);
+
+            // If the user's input is empty, and it's not the first message, increment the counter
+            // This is a simple heuristic to detect no-match scenarios
+            if (userMessage.trim() === '' && fallbackCount > 0) {
+                 fallbackCount++;
+            }
+            // --- End: Fallback Counter Logic ---
+
+
             // The Dialogflow REST API endpoint
             const url = `https://dialogflow.googleapis.com/v2/projects/${projectId}/agent/sessions/${sessionId}:detectIntent`;
 
@@ -187,28 +206,41 @@ export default {
             const dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
             const dialogflowIntent = result.intent ? result.intent.displayName : 'UNKNOWN';
             const dialogflowConfidence = result.intentDetectionConfidence || 0;
-            const outputContexts = result.outputContexts || [];
-
-            // --- NEW Logic to check for end of conversation signal ---
+            let outputContexts = result.outputContexts || [];
+            
+            // --- Start: Post-processing fallback logic ---
             let endConversation = false;
+            let finalReply = dialogflowReply;
 
-            if (result.diagnosticInfo && result.diagnosticInfo.end_conversation) {
-                endConversation = true;
-                console.log('End conversation flag detected in diagnosticInfo.');
+            if (dialogflowIntent === "Default Fallback Intent") {
+                fallbackCount++;
+                if (fallbackCount >= 3) {
+                    endConversation = true;
+                    finalReply = "I'm sorry, I am unable to help with that. Please contact a human agent for assistance. Goodbye!";
+                } else {
+                    const newFallbackContext = {
+                        name: fallbackContextName,
+                        lifespanCount: 1,
+                        parameters: {
+                            fallback_count: fallbackCount
+                        }
+                    };
+                    outputContexts.push(newFallbackContext);
+                    finalReply = "I'm sorry, I'm having trouble understanding. Could you please try rephrasing?";
+                }
+            } else {
+                 // Reset the fallback counter if a valid intent is matched
+                 fallbackCount = 0;
             }
 
-            if (result.intent && result.intent.endInteraction) {
-                endConversation = true;
-                console.log('End conversation flag detected on the intent.');
-            }
-            // --- END: NEW Logic ---
-
+            // --- End: Post-processing fallback logic ---
+            
             // Build the response in the format required by the Genesys Cloud Bot Connector
             const finalResponse = {
                 "replymessages": [
                     {
                         "type": "Text",
-                        "text": dialogflowReply
+                        "text": finalReply
                     }
                 ],
                 "intent": dialogflowIntent,
