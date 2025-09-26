@@ -121,13 +121,16 @@ export default {
             const accessToken = await getAccessToken(jwt);
 
             // --- Start: Fallback Counter Context Setup ---
-            const FALLBACK_CONTEXT_NAME = `projects/${projectId}/agent/sessions/${sessionId}/contexts/fallback_counter`;
+            // NOTE: The full context path is required for the REST API request body, but for simplicity in the context name (which is what Genesys passes back to the connector), we rely on the session path here.
+            const FALLBACK_CONTEXT_DISPLAY_NAME = 'fallback_counter'; 
+            const FALLBACK_CONTEXT_FULL_NAME = `projects/${projectId}/agent/sessions/${sessionId}/contexts/${FALLBACK_CONTEXT_DISPLAY_NAME}`;
             let fallbackCount = 0;
             let existingFallbackContextIndex = -1;
 
             // Find existing fallback context and read the count
             const fallbackContext = botContexts.find((context, index) => {
-                if (context.name === FALLBACK_CONTEXT_NAME) {
+                // We check the full name for matching
+                if (context.name === FALLBACK_CONTEXT_FULL_NAME) {
                     existingFallbackContextIndex = index;
                     return true;
                 }
@@ -154,7 +157,8 @@ export default {
                     },
                 },
                 queryParams: {
-                    contexts: botContexts // Send all existing contexts
+                    // Send all existing contexts back, including the fallback counter if it exists
+                    contexts: botContexts 
                 }
             };
 
@@ -185,25 +189,30 @@ export default {
                     botState = "COMPLETE";
                     dialogflowReply = "I'm sorry, I cannot understand your request after multiple attempts. I am now closing this conversation. Please contact a human agent if you require further assistance.";
 
-                    // Remove the fallback context to clean up
-                    if (existingFallbackContextIndex !== -1) {
-                         outputContexts.splice(existingFallbackContextIndex, 1);
-                    }
+                    // We ensure the context is removed from the output by setting lifespan to 0
+                    outputContexts.push({
+                        name: FALLBACK_CONTEXT_FULL_NAME,
+                        lifespanCount: 0,
+                        parameters: {
+                            count: fallbackCount.toString()
+                        }
+                    });
 
                 } else {
                     // *** Not 3 strikes: Send generic message and update counter context ***
                     dialogflowReply = "I'm sorry, I'm still having trouble understanding. Could you please try rephrasing?";
 
-                    // Prepare the updated fallback context
+                    // Prepare the updated fallback context object for the output
                     const updatedFallbackContext = {
-                        name: FALLBACK_CONTEXT_NAME,
+                        // Crucial: Use the FULL context name path for the output contexts
+                        name: FALLBACK_CONTEXT_FULL_NAME,
                         lifespanCount: 1, // Keep context alive for the next turn
                         parameters: {
                             count: fallbackCount.toString()
                         }
                     };
 
-                    // Add or replace the fallback context in the output contexts
+                    // Check if we need to replace an existing context or push a new one
                     if (existingFallbackContextIndex !== -1) {
                         outputContexts[existingFallbackContextIndex] = updatedFallbackContext;
                     } else {
@@ -211,10 +220,9 @@ export default {
                     }
                 }
             } else if (fallbackCount > 0) {
-                // A valid intent was matched. Reset the counter.
-                // We signal the lifespan should end (lifespanCount=0).
+                // A valid intent was matched. Reset the counter by setting lifespan to 0.
                 outputContexts.push({
-                    name: FALLBACK_CONTEXT_NAME,
+                    name: FALLBACK_CONTEXT_FULL_NAME,
                     lifespanCount: 0,
                     parameters: {
                         count: "0"
