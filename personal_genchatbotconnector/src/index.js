@@ -178,23 +178,22 @@ export default {
 
             // Get the fulfillment text from Dialogflow's response
             const dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
+            const dialogflowIntent = result.intent ? result.intent.displayName : 'UNKNOWN';
+            const dialogflowConfidence = result.intentDetectionConfidence || 0;
 
             // --- NEW Logic to check for end of conversation signal ---
-            let botState = "MOREDATA";
+            let endConversation = false;
 
-            // Check for the diagnosticInfo flag (more reliable for custom integrations)
             if (result.diagnosticInfo && result.diagnosticInfo.end_conversation) {
-                botState = "COMPLETE";
-                console.log('End conversation flag detected in diagnosticInfo. Setting botState to COMPLETE.');
+                endConversation = true;
+                console.log('End conversation flag detected in diagnosticInfo.');
             }
 
-            // Also check for the intent's endInteraction flag (some versions/integrations use this)
             if (result.intent && result.intent.endInteraction) {
-                botState = "COMPLETE";
-                console.log('End conversation flag detected on the intent. Setting botState to COMPLETE.');
+                endConversation = true;
+                console.log('End conversation flag detected on the intent.');
             }
             // --- END: NEW Logic ---
-
 
             // Build the response in the format required by the Genesys Cloud Bot Connector
             const finalResponse = {
@@ -204,7 +203,11 @@ export default {
                         "text": dialogflowReply
                     }
                 ],
-                "botState": botState
+                // Add intent and confidence to the response
+                "intent": dialogflowIntent,
+                "confidence": dialogflowConfidence,
+                // Conditionally add a signal to end the session based on the intent name
+                "botState": endConversation ? "COMPLETE" : "MOREDATA"
             };
 
             console.log('Final response sent to Genesys Cloud:', JSON.stringify(finalResponse, null, 2));
