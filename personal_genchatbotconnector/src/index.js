@@ -24,7 +24,7 @@ async function createJWT(payload, privateKey) {
         data
     );
 
-    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8array(signature)))
+    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8Array(signature)))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
     return `${token}.${signatureBase64Url}`;
@@ -139,19 +139,6 @@ export default {
 
             console.log('Dialogflow Project ID:', projectId);
 
-            // --- Start: Fallback Counter Logic ---
-            let fallbackCount = 0;
-            const fallbackContextName = `projects/${projectId}/agent/sessions/${sessionId}/contexts/fallback_counter`;
-
-            const existingFallbackContext = botContexts.find(context => context.name === fallbackContextName);
-            if (existingFallbackContext && existingFallbackContext.parameters && existingFallbackContext.parameters.fallback_count) {
-                fallbackCount = existingFallbackContext.parameters.fallback_count;
-            }
-
-            console.log('Current fallback count:', fallbackCount);
-
-            // --- End: Fallback Counter Logic ---
-
             // The Dialogflow REST API endpoint
             const url = `https://dialogflow.googleapis.com/v2/projects/${projectId}/agent/sessions/${sessionId}:detectIntent`;
 
@@ -202,59 +189,18 @@ export default {
             const dialogflowConfidence = result.intentDetectionConfidence || 0;
             let outputContexts = result.outputContexts || [];
             
-            // --- Start: Post-processing fallback logic ---
-            let endConversation = false;
-            let finalReply = dialogflowReply;
-
-            // Check if the matched intent is the fallback intent.
-            if (dialogflowIntent === "Default Fallback Intent") {
-                // Check if the previous conversation had an active context
-                const previousContext = botContexts.find(context => context.lifespanCount > 0);
-
-                if (fallbackCount >= 2) { // End the conversation after 3 total fallbacks (0, 1, 2)
-                    endConversation = true;
-                    finalReply = "I'm sorry, I am unable to help with that. Please contact a human agent for assistance. Goodbye!";
-                } else {
-                    fallbackCount++;
-                    finalReply = "I'm sorry, I'm having trouble understanding. Could you please try rephrasing?";
-
-                    // If there was a previous context, re-apply it to the next turn.
-                    if (previousContext) {
-                        outputContexts.push({
-                            name: previousContext.name,
-                            lifespanCount: 1, // Reset lifespan to 1 to keep it active for the next turn
-                            parameters: previousContext.parameters
-                        });
-                    }
-                    
-                    // Add the fallback counter context
-                    outputContexts.push({
-                        name: fallbackContextName,
-                        lifespanCount: 1,
-                        parameters: {
-                            fallback_count: fallbackCount
-                        }
-                    });
-                }
-            } else {
-                 // Reset the fallback counter if a valid intent is matched
-                 fallbackCount = 0;
-            }
-
-            // --- End: Post-processing fallback logic ---
-            
             // Build the response in the format required by the Genesys Cloud Bot Connector
             const finalResponse = {
                 "replymessages": [
                     {
                         "type": "Text",
-                        "text": finalReply
+                        "text": dialogflowReply
                     }
                 ],
                 "intent": dialogflowIntent,
                 "confidence": dialogflowConfidence,
                 "botContexts": outputContexts,
-                "botState": endConversation ? "COMPLETE" : "MOREDATA"
+                "botState": "MOREDATA"
             };
 
             console.log('Final response sent to Genesys Cloud:', JSON.stringify(finalResponse, null, 2));
