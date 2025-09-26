@@ -24,7 +24,7 @@ async function createJWT(payload, privateKey) {
         data
     );
 
-    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8array(signature)))
+    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8Array(signature)))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
     return `${token}.${signatureBase64Url}`;
