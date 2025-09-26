@@ -81,9 +81,6 @@ export default {
             const expectedUsername = env.WORKER_USERNAME;
             const expectedPassword = env.WORKER_PASSWORD;
 
-            console.log('Worker Username:', expectedUsername);
-            console.log('Worker Password:', expectedPassword ? 'Exists' : 'Does not exist');
-
             if (username !== expectedUsername || password !== expectedPassword) {
                 return new Response("Unauthorized", { status: 401 });
             }
@@ -91,42 +88,28 @@ export default {
 
             // Parse the incoming request body from the bot connector
             const requestBody = await request.json();
-            console.log('Received message from bot connector:', JSON.stringify(requestBody, null, 2));
 
-            // Extract the user's message and language code
+            // Extract core variables
             const userMessage = requestBody.inputMessage.text;
-            const languageCode = requestBody.languageCode || 'en-US'; // Use the languageCode from the request or default
-            const sessionId = requestBody.botSessionId; // Use botSessionId as the session ID
-            const botContexts = requestBody.botContexts || []; // Get existing contexts from the request
-
-            console.log('User Message:', userMessage);
-            console.log('Session ID:', sessionId);
-            console.log('Bot Contexts:', JSON.stringify(botContexts, null, 2));
+            const languageCode = requestBody.languageCode || 'en-US';
+            const sessionId = requestBody.botSessionId;
+            let botContexts = requestBody.botContexts || []; 
 
             if (!userMessage) {
                 return new Response("No user message found.", { status: 400 });
             }
 
-            // Get Dialogflow credentials from environment variables.
-            // NOTE: Make sure to set DIALOGFLOW_CREDENTIALS as a secret in your Cloudflare Worker.
-            console.log('Checking DIALOGFLOW_CREDENTIALS...');
+            // Get Dialogflow credentials
             if (!env.DIALOGFLOW_CREDENTIALS) {
                 throw new Error('DIALOGFLOW_CREDENTIALS environment variable is not set.');
             }
-
-            let credentials;
-            try {
-                credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
-            } catch (parseError) {
-                console.error('Failed to parse DIALOGFLOW_CREDENTIALS JSON:', parseError.message);
-                return new Response(`Error: Failed to parse credentials. Details: ${parseError.message}`, { status: 500 });
-            }
-
+            let credentials = JSON.parse(env.DIALOGFLOW_CREDENTIALS);
+            
             const projectId = credentials.project_id;
             const privateKey = credentials.private_key.replace(/\\n/g, '\n');
             const clientEmail = credentials.client_email;
 
-            // Generate an access token from the private key
+            // Generate token (omitted logging for brevity)
             const payload = {
                 "iss": clientEmail,
                 "scope": "https://www.googleapis.com/auth/cloud-platform",
@@ -137,7 +120,27 @@ export default {
             const jwt = await createJWT(payload, privateKey);
             const accessToken = await getAccessToken(jwt);
 
-            console.log('Dialogflow Project ID:', projectId);
+            // --- Start: Fallback Counter Context Setup ---
+            const FALLBACK_CONTEXT_NAME = `projects/${projectId}/agent/sessions/${sessionId}/contexts/fallback_counter`;
+            let fallbackCount = 0;
+            let existingFallbackContextIndex = -1;
+
+            // Find existing fallback context and read the count
+            const fallbackContext = botContexts.find((context, index) => {
+                if (context.name === FALLBACK_CONTEXT_NAME) {
+                    existingFallbackContextIndex = index;
+                    return true;
+                }
+                return false;
+            });
+
+            if (fallbackContext && fallbackContext.parameters && fallbackContext.parameters.count) {
+                // Parse count from string, or default to 0 if invalid
+                const parsedCount = parseInt(fallbackContext.parameters.count, 10);
+                fallbackCount = isNaN(parsedCount) ? 0 : parsedCount;
+            }
+            // --- End: Fallback Counter Context Setup ---
+
 
             // The Dialogflow REST API endpoint
             const url = `https://dialogflow.googleapis.com/v2/projects/${projectId}/agent/sessions/${sessionId}:detectIntent`;
@@ -150,46 +153,78 @@ export default {
                         languageCode: languageCode,
                     },
                 },
-                // Pass the contexts back to Dialogflow
                 queryParams: {
-                    contexts: botContexts
+                    contexts: botContexts // Send all existing contexts
                 }
             };
 
-            console.log('Sending request to Dialogflow with payload:', JSON.stringify(dialogflowRequest, null, 2));
+            // Send the query to Dialogflow (omitted logging for brevity)
+            const response = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(dialogflowRequest) });
 
-            // Send the query to Dialogflow using the fetch API
-            const response = await fetch(url, {
-                method: 'POST',
-                headers: {
-                    'Authorization': `Bearer ${accessToken}`,
-                    'Content-Type': 'application/json'
-                },
-                body: JSON.stringify(dialogflowRequest)
-            });
-
-            // --- START: New Error Handling for API Response ---
             if (!response.ok) {
                 const errorBody = await response.json();
-                console.error('Dialogflow API returned an error:', JSON.stringify(errorBody, null, 2));
-                // Throw an error to be caught by the main catch block
-                throw new Error(`Dialogflow API error: ${response.status} ${response.statusText}`);
+                throw new Error(`Dialogflow API error: ${response.status} ${response.statusText} - ${errorBody.error.message}`);
             }
-            // --- END: New Error Handling ---
 
             const dialogflowResponse = await response.json();
             const result = dialogflowResponse.queryResult;
-
-            // Log the Dialogflow response for debugging
-            console.log('Dialogflow response:', JSON.stringify(dialogflowResponse, null, 2));
-
-            // Get the fulfillment text from Dialogflow's response
-            const dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
+            
             const dialogflowIntent = result.intent ? result.intent.displayName : 'UNKNOWN';
             const dialogflowConfidence = result.intentDetectionConfidence || 0;
             let outputContexts = result.outputContexts || [];
-            
-            // Build the response in the format required by the Genesys Cloud Bot Connector
+            let dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
+            let botState = "MOREDATA";
+
+            // --- Start: Post-processing Fallback Logic ---
+            if (dialogflowIntent === "Default Fallback Intent") {
+                // This is a failed attempt. Increment the counter.
+                fallbackCount++;
+
+                if (fallbackCount >= 3) {
+                    // *** 3rd strike: END THE CONVERSATION ***
+                    botState = "COMPLETE";
+                    dialogflowReply = "I'm sorry, I cannot understand your request after multiple attempts. I am now closing this conversation. Please contact a human agent if you require further assistance.";
+
+                    // Remove the fallback context to clean up
+                    if (existingFallbackContextIndex !== -1) {
+                         outputContexts.splice(existingFallbackContextIndex, 1);
+                    }
+
+                } else {
+                    // *** Not 3 strikes: Send generic message and update counter context ***
+                    dialogflowReply = "I'm sorry, I'm still having trouble understanding. Could you please try rephrasing?";
+
+                    // Prepare the updated fallback context
+                    const updatedFallbackContext = {
+                        name: FALLBACK_CONTEXT_NAME,
+                        lifespanCount: 1, // Keep context alive for the next turn
+                        parameters: {
+                            count: fallbackCount.toString()
+                        }
+                    };
+
+                    // Add or replace the fallback context in the output contexts
+                    if (existingFallbackContextIndex !== -1) {
+                        outputContexts[existingFallbackContextIndex] = updatedFallbackContext;
+                    } else {
+                        outputContexts.push(updatedFallbackContext);
+                    }
+                }
+            } else if (fallbackCount > 0) {
+                // A valid intent was matched. Reset the counter.
+                // We signal the lifespan should end (lifespanCount=0).
+                outputContexts.push({
+                    name: FALLBACK_CONTEXT_NAME,
+                    lifespanCount: 0,
+                    parameters: {
+                        count: "0"
+                    }
+                });
+            }
+            // --- End: Post-processing Fallback Logic ---
+
+
+            // Build the final response
             const finalResponse = {
                 "replymessages": [
                     {
@@ -200,10 +235,8 @@ export default {
                 "intent": dialogflowIntent,
                 "confidence": dialogflowConfidence,
                 "botContexts": outputContexts,
-                "botState": "MOREDATA"
+                "botState": botState
             };
-
-            console.log('Final response sent to Genesys Cloud:', JSON.stringify(finalResponse, null, 2));
 
             // Return the JSON response with a 200 OK status
             return new Response(JSON.stringify(finalResponse), {
@@ -214,9 +247,8 @@ export default {
             });
 
         } catch (e) {
-            // Catch any errors that might occur and log the full message
-            console.error('Error processing request:', e.message);
-            return new Response(`Error: ${e.message}`, { status: 500 });
+            // Catch any errors that might occur
+            return new Response(`Error processing request: ${e.message}`, { status: 500 });
         }
     },
 };
