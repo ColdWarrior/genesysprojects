@@ -127,13 +127,13 @@ export default {
             let existingFallbackContext = null;
 
             // Find existing fallback context and read the count
-            // We search by the DISPLAY NAME since Genesys often only passes back contexts relevant to the current session path
+            // We look for the context that contains the display name in its full name path
             existingFallbackContext = botContexts.find(context => 
                 context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
             );
 
             if (existingFallbackContext && existingFallbackContext.parameters && existingFallbackContext.parameters.count) {
-                // Parse count from string, or default to 0 if invalid
+                // IMPORTANT: The count must be parsed as a number.
                 const parsedCount = parseInt(existingFallbackContext.parameters.count, 10);
                 fallbackCount = isNaN(parsedCount) ? 0 : parsedCount;
             }
@@ -173,16 +173,19 @@ export default {
             let outputContexts = result.outputContexts || [];
             let dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
             let botState = "MOREDATA";
+            
+            // Filter output contexts to separate slot-filling contexts from the fallback counter itself
+            const activeSlotContexts = outputContexts.filter(context => 
+                !context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
+            );
+            
+            // Start with a clean list of output contexts that only contains active slot-filling contexts
+            outputContexts = activeSlotContexts;
 
             // --- Start: Post-processing Fallback Logic ---
             if (dialogflowIntent === "Default Fallback Intent") {
                 // This is a failed attempt. Increment the counter.
                 fallbackCount++;
-
-                // Remove the old fallback context if it exists to ensure we only have one copy in the output
-                outputContexts = outputContexts.filter(context => 
-                    !context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
-                );
 
                 if (fallbackCount >= 3) {
                     // *** 3rd strike: END THE CONVERSATION ***
@@ -201,12 +204,11 @@ export default {
 
                 } else {
                     // *** Not 3 strikes: Send generic message and update counter context ***
-                    // Ensure the generic reply is used
+                    // Use the generic reply
                     dialogflowReply = "I'm sorry, I'm still having trouble understanding. Could you please try rephrasing?";
 
                     // Prepare the updated fallback context object for the output
                     const updatedFallbackContext = {
-                        // Crucial: Use the FULL context name path for the output contexts
                         name: FALLBACK_CONTEXT_FULL_NAME,
                         lifespanCount: 1, // Keep context alive for the next turn
                         parameters: {
@@ -220,11 +222,6 @@ export default {
             } else if (existingFallbackContext) {
                 // A valid intent was matched. Reset the counter by setting lifespan to 0.
                 
-                // Remove the old fallback context before pushing the reset one
-                outputContexts = outputContexts.filter(context => 
-                    !context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
-                );
-
                 const resetContext = {
                     name: FALLBACK_CONTEXT_FULL_NAME,
                     lifespanCount: 0,
