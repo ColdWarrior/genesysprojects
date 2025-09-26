@@ -93,12 +93,15 @@ export default {
             const requestBody = await request.json();
             console.log('Received message from bot connector:', JSON.stringify(requestBody, null, 2));
 
-            // Extract the user's message from the specified schema
+            // Extract the user's message and language code
             const userMessage = requestBody.inputMessage.text;
+            const languageCode = requestBody.languageCode || 'en-US'; // Use the languageCode from the request or default
             const sessionId = requestBody.botSessionId; // Use botSessionId as the session ID
+            const botContexts = requestBody.botContexts || []; // Get existing contexts from the request
 
             console.log('User Message:', userMessage);
             console.log('Session ID:', sessionId);
+            console.log('Bot Contexts:', JSON.stringify(botContexts, null, 2));
 
             if (!userMessage) {
                 return new Response("No user message found.", { status: 400 });
@@ -144,9 +147,13 @@ export default {
                 queryInput: {
                     text: {
                         text: userMessage,
-                        languageCode: 'en-US',
+                        languageCode: languageCode,
                     },
                 },
+                // Pass the contexts back to Dialogflow
+                queryParams: {
+                    contexts: botContexts
+                }
             };
 
             console.log('Sending request to Dialogflow with payload:', JSON.stringify(dialogflowRequest, null, 2));
@@ -180,6 +187,7 @@ export default {
             const dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
             const dialogflowIntent = result.intent ? result.intent.displayName : 'UNKNOWN';
             const dialogflowConfidence = result.intentDetectionConfidence || 0;
+            const outputContexts = result.outputContexts || [];
 
             // --- NEW Logic to check for end of conversation signal ---
             let endConversation = false;
@@ -203,10 +211,9 @@ export default {
                         "text": dialogflowReply
                     }
                 ],
-                // Add intent and confidence to the response
                 "intent": dialogflowIntent,
                 "confidence": dialogflowConfidence,
-                // Conditionally add a signal to end the session based on the intent name
+                "botContexts": outputContexts,
                 "botState": endConversation ? "COMPLETE" : "MOREDATA"
             };
 
