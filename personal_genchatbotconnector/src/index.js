@@ -24,7 +24,7 @@ async function createJWT(payload, privateKey) {
         data
     );
 
-    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8Array(signature)))
+    const signatureBase64Url = btoa(String.fromCharCode(...new Uint8array(signature)))
         .replace(/\+/g, '-').replace(/\//g, '_').replace(/=/g, '');
 
     return `${token}.${signatureBase64Url}`;
@@ -93,9 +93,13 @@ export default {
             const userMessage = requestBody.inputMessage.text;
             const languageCode = requestBody.languageCode || 'en-US';
             const sessionId = requestBody.botSessionId;
+            // Get all contexts provided by Genesys (essential for continuity)
             let botContexts = requestBody.botContexts || []; 
 
-            if (!userMessage) {
+            if (!userMessage && requestBody.parameters && requestBody.parameters.initialEventName) {
+                // Special case for initial request using an event name instead of text
+                // Dialogflow uses a 'WELCOME' event for the first message, which should be handled by the flow author
+            } else if (!userMessage) {
                 return new Response("No user message found.", { status: 400 });
             }
 
@@ -120,44 +124,6 @@ export default {
             const jwt = await createJWT(payload, privateKey);
             const accessToken = await getAccessToken(jwt);
 
-            // --- Start: Fallback Counter Context Setup ---
-            const FALLBACK_CONTEXT_DISPLAY_NAME = 'fallback_counter'; 
-            const FALLBACK_CONTEXT_FULL_NAME = `projects/${projectId}/agent/sessions/${sessionId}/contexts/${FALLBACK_CONTEXT_DISPLAY_NAME}`;
-            let fallbackCount = 0;
-            let existingFallbackContext = null;
-
-            // Find existing fallback context and read the count
-            existingFallbackContext = botContexts.find(context => 
-                context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
-            );
-
-            if (existingFallbackContext && existingFallbackContext.parameters) {
-                let countValue = null;
-                
-                // Prioritize reading from the 'fields' object, which is common in structured JSON returns
-                const fields = existingFallbackContext.parameters.fields;
-                
-                if (fields && fields.count) {
-                    // Check for nested types: numberValue first, then stringValue
-                    if (fields.count.numberValue !== undefined) {
-                        countValue = fields.count.numberValue;
-                    } else if (fields.count.stringValue !== undefined) {
-                        countValue = fields.count.stringValue;
-                    }
-                } else if (existingFallbackContext.parameters.count) {
-                    // Fallback to directly reading the 'count' property
-                    countValue = existingFallbackContext.parameters.count;
-                }
-                
-                if (countValue !== null) {
-                     // Ensure value is parsed to integer for comparison
-                    const parsedCount = parseInt(countValue, 10);
-                    fallbackCount = isNaN(parsedCount) ? 0 : parsedCount;
-                }
-            }
-            // --- End: Fallback Counter Context Setup ---
-
-
             // The Dialogflow REST API endpoint
             const url = `https://dialogflow.googleapis.com/v2/projects/${projectId}/agent/sessions/${sessionId}:detectIntent`;
 
@@ -170,12 +136,12 @@ export default {
                     },
                 },
                 queryParams: {
-                    // Send all existing contexts back
+                    // Send all existing contexts back to Dialogflow for memory
                     contexts: botContexts 
                 }
             };
 
-            // Send the query to Dialogflow (omitted logging for brevity)
+            // Send the query to Dialogflow 
             const response = await fetch(url, { method: 'POST', headers: { 'Authorization': `Bearer ${accessToken}`, 'Content-Type': 'application/json' }, body: JSON.stringify(dialogflowRequest) });
 
             if (!response.ok) {
@@ -190,66 +156,23 @@ export default {
             const dialogflowConfidence = result.intentDetectionConfidence || 0;
             let outputContexts = result.outputContexts || [];
             let dialogflowReply = result.fulfillmentText || 'No response from Dialogflow.';
-            let botState = "MOREDATA";
             
-            // Filter output contexts to separate slot-filling contexts from the fallback counter itself
-            const activeSlotContexts = outputContexts.filter(context => 
-                !context.name.endsWith(FALLBACK_CONTEXT_DISPLAY_NAME)
-            );
+            // Simplified logic: Assume MOREDATA unless the intent is marked for session end (which should be configured in DF)
+            let botState = "MOREDATA"; 
             
-            // Start with a clean list of output contexts that only contains active slot-filling contexts
-            outputContexts = activeSlotContexts;
-
-            // --- Start: Post-processing Fallback Logic ---
-            if (dialogflowIntent === "Default Fallback Intent") {
-                // This is a failed attempt. Increment the counter.
-                fallbackCount++;
-
-                if (fallbackCount >= 3) {
-                    // *** 3rd strike: END THE CONVERSATION ***
-                    botState = "COMPLETE";
-                    dialogflowReply = "I'm sorry, I cannot understand your request after multiple attempts. I am now closing this conversation. Please contact a human agent if you require further assistance.";
-
-                    // Ensure the context is removed from the output by setting lifespan to 0
-                    const finalContext = {
-                        name: FALLBACK_CONTEXT_FULL_NAME,
-                        lifespanCount: 0,
-                        parameters: {
-                            count: fallbackCount.toString()
-                        }
-                    };
-                    outputContexts.push(finalContext);
-
-                } else {
-                    // *** Not 3 strikes: Send generic message and update counter context ***
-                    // Use the generic reply
-                    dialogflowReply = "I'm sorry, I'm still having trouble understanding. Could you please try rephrasing?";
-
-                    // Prepare the updated fallback context object for the output
-                    const updatedFallbackContext = {
-                        name: FALLBACK_CONTEXT_FULL_NAME,
-                        lifespanCount: 1, // Keep context alive for the next turn
-                        parameters: {
-                            count: fallbackCount.toString()
-                        }
-                    };
-
-                    // Add the updated context to the output contexts array
-                    outputContexts.push(updatedFallbackContext);
-                }
-            } else if (fallbackCount > 0) {
-                // A valid intent was matched. Reset the counter by setting lifespan to 0.
-                
-                const resetContext = {
-                    name: FALLBACK_CONTEXT_FULL_NAME,
-                    lifespanCount: 0,
-                    parameters: {
-                        count: "0"
-                    }
-                };
-                outputContexts.push(resetContext);
+            // If the intent is marked to end the session (optional check, depends on DF config)
+            if (result.intent && result.intent.endInteraction) {
+                 botState = "COMPLETE";
             }
-            // --- End: Post-processing Fallback Logic ---
+
+            // --- IMPORTANT: Ensure Fallback returns MOREDATA (loop continues) ---
+            // If Dialogflow fails to match an intent, it will return Default Fallback Intent.
+            // We set the botState to MOREDATA to ensure the Architect loop continues.
+            if (dialogflowIntent === "Default Fallback Intent") {
+                 botState = "MOREDATA"; 
+                 dialogflowReply = dialogflowReply || "I'm sorry, I'm still having trouble understanding. Could you please try rephrasing?";
+            }
+            // --- End: Simplified Logic ---
 
 
             // Build the final response
@@ -262,7 +185,7 @@ export default {
                 ],
                 "intent": dialogflowIntent,
                 "confidence": dialogflowConfidence,
-                "botContexts": outputContexts,
+                "botContexts": outputContexts, // Pass contexts back for conversational memory
                 "botState": botState
             };
 
@@ -276,6 +199,7 @@ export default {
 
         } catch (e) {
             // Catch any errors that might occur
+            // Note: Returning FAILED state would require adjusting the final response structure
             return new Response(`Error processing request: ${e.message}`, { status: 500 });
         }
     },
